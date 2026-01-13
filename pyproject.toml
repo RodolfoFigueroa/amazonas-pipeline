@@ -1,0 +1,41 @@
+[project]
+name = "amazonas-pipeline"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "affine>=2.4.0",
+    "dagster>=1.12.10",
+    "dagster-dg-cli>=1.12.10",
+    "dagster-webserver>=1.12.10",
+    "geopandas>=1.1.2",
+    "matplotlib>=3.10.8",
+    "numpy>=2.2.6",
+    "pandas>=2.3.3",
+    "pandas-stubs>=2.3.3.251201",
+    "pyrosm>=0.6.2",
+    "rasterio>=1.4.4",
+    "rpy2>=3.6.4",
+    "scipy>=1.15.3",
+    "shapely>=2.1.2",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = ["D", "PLR2004", "ANN401"]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+ignore = ["**/*.ipynb"]
+
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "amazonas_pipeline"
