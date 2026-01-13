@@ -64,5 +64,5 @@ To ease organization, assets are collected into **groups**. What follows is a hi
 * `ghsl`: Downloading, cropping and calculating SMOD rasters using configurable parameters, and polygonizing said rasters.
 * `cells`: Splitting the obtained polygons into individual cells for further processing.
 * `features`: Filtering and processing Geofabrik features to obtain settlement names.
-* `polygons`: Processing the obtained settlement polygons, including obtaining their names, population, and historical evolution.
+* `polygons`: Processing the obtained settlement polygons, including obtaining their names, countries, population, and historical evolution.
 * `sheets`: Converting the final polygons into Excel sheets.
