@@ -2,7 +2,6 @@ import tempfile
 import warnings
 from pathlib import Path
 
-import dagster as dg
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
@@ -17,6 +16,7 @@ from rpy2.robjects import r
 from rpy2.robjects.packages import importr
 from rpy2.robjects.vectors import FloatVector, ListVector, StrVector
 
+import dagster as dg
 from amazonas_pipeline.defs.partitions import (
     year_and_threshold_partitions,
     year_partitions,
@@ -71,7 +71,7 @@ def ghsl_rasters(
 @dg.asset(
     key=["ghsl", "cropped"],
     ins={
-        "boundary": dg.AssetIn(key=["boundary"]),
+        "boundary": dg.AssetIn(key=["regions", "boundary"]),
     },
     partitions_def=year_partitions,
     deps=[dg.AssetDep(["ghsl", "base"])],
@@ -177,7 +177,7 @@ def crop_pop(
     bounds = rio_transform.array_bounds(height, width, transform)
     bbox = shapely.geometry.box(*bounds)
 
-    fpath = Path(path_resource.ghsl_global_path) / "POP_1000" / f"{year}.tif"
+    fpath = Path(path_resource.ghsl_path) / "POP_1000" / f"{year}.tif"
     with rio.open(fpath) as ds:
         masked, _ = rio_mask.mask(ds, [bbox], crop=True, nodata=0)
         return masked.squeeze()
