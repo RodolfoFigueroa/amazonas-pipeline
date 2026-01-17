@@ -235,7 +235,11 @@ def threshold_and_polygonize(
             df_out.append(
                 {"pop": counts[int(value)], "geometry": shapely.geometry.shape(geom)},
             )
-    return gpd.GeoDataFrame(df_out, crs="ESRI:54009")
+    return (
+        gpd.GeoDataFrame(df_out, crs="ESRI:54009")
+        .reset_index(names="polygon_id")
+        .assign(polygon_id=lambda df: "p" + df["polygon_id"].astype(str).str.zfill(6))
+    )
 
 
 @dg.graph_asset(

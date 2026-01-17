@@ -70,7 +70,12 @@ def regions_lowest_level(path_resource: PathResource) -> gpd.GeoDataFrame:
         )
         out.append(df)
 
-    return gpd.GeoDataFrame(pd.concat(out, ignore_index=True)).to_crs("ESRI:54009")
+    return (
+        gpd.GeoDataFrame(pd.concat(out, ignore_index=True))
+        .to_crs("ESRI:54009")
+        .reset_index(names="region_id")
+        .assign(region_id=lambda df: "r" + df["region_id"].astype(str).str.zfill(5))
+    )
 
 
 @dg.asset(
