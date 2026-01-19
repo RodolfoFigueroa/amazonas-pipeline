@@ -1,7 +1,11 @@
 from pathlib import Path
 
 import dagster as dg
-from amazonas_pipeline.defs.managers import DataFrameIOManager, GeoDataFrameIOManager, RasterIOManager
+from amazonas_pipeline.defs.managers import (
+    DataFrameIOManager,
+    GeoDataFrameIOManager,
+    RasterIOManager,
+)
 from amazonas_pipeline.defs.resources import PathResource
 
 # Resources

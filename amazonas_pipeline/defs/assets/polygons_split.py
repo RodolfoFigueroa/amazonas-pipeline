@@ -126,7 +126,12 @@ def polygons_split(
         pops_by_smod.append(temp)
 
     pops_by_smod_df = pd.concat(pops_by_smod, axis=1)
-    final_pops = pd.concat([total_pops, pops_by_smod_df], axis=1).reset_index().drop(columns=["polygon_id"], errors="ignore").rename(columns={"duplicate_polygon_id": "polygon_id"})
+    final_pops = (
+        pd.concat([total_pops, pops_by_smod_df], axis=1)
+        .reset_index()
+        .drop(columns=["polygon_id"], errors="ignore")
+        .rename(columns={"duplicate_polygon_id": "polygon_id"})
+    )
 
     return (
         pd.concat(

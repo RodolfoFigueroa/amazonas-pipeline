@@ -1,8 +1,8 @@
-import dagster as dg
-from amazonas_pipeline.defs.partitions import year_and_threshold_partitions
 import geopandas as gpd
 import pandas as pd
 
+import dagster as dg
+from amazonas_pipeline.defs.partitions import year_and_threshold_partitions
 
 COLUMN_ORDER = [
     "polygon_id",
@@ -18,7 +18,12 @@ COLUMN_ORDER = [
     "GID_2",
     "GID_3",
     "GID_4",
-] + [f"pop{infix}_{year}" for year in range(1975, 2021, 5) for infix in ["", "_rural", "_urban_center", "_urban_cluster"]]
+] + [
+    f"pop{infix}_{year}"
+    for year in range(1975, 2021, 5)
+    for infix in ["", "_rural", "_urban_center", "_urban_cluster"]
+]
+
 
 def sheets_factory(key: list[str], in_key: list[str]) -> dg.AssetsDefinition:
     @dg.asset(
@@ -29,9 +34,12 @@ def sheets_factory(key: list[str], in_key: list[str]) -> dg.AssetsDefinition:
         group_name="sheets",
     )
     def _asset(df_polygons: gpd.GeoDataFrame) -> pd.DataFrame:
-        return df_polygons[[col for col in COLUMN_ORDER if col in df_polygons.columns]].rename(columns={"NAME_0": "COUNTRY"})
+        return df_polygons[
+            [col for col in COLUMN_ORDER if col in df_polygons.columns]
+        ].rename(columns={"NAME_0": "COUNTRY"})
 
     return _asset
+
 
 sheets_asset = [
     sheets_factory(["sheets", "polygons"], ["polygons", "population"]),
