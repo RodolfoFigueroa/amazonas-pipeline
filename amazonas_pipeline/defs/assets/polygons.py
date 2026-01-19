@@ -446,27 +446,120 @@ def polygons_renamed_with_nearby(
     )
 
 
+def get_feature_ids_from_name_list(name_list: str) -> list[str]:
+    out = [name.split(" ")[-1].strip("[]") for name in name_list]
+    if len(out) == 1 and out[0] == "":
+        return []
+    return out
+
+
+def filter_name_by_country(name: str, country: str) -> str:
+    out = []
+    for part in name.split("+"):
+        if country in part:
+            out.append(part.strip())
+    return "+".join(out)
+
+
 @dg.asset(
     key=["polygons", "unique_name"],
     ins={
-        "polygons_renamed_with_nearby": dg.AssetIn(
+        "df_polygons": dg.AssetIn(
             key=["polygons", "renamed_with_nearby"],
         ),
-        "features": dg.AssetIn(["features", "filtered_places"]),
+        "df_features": dg.AssetIn(["features", "filtered_places"]),
     },
     partitions_def=year_and_threshold_partitions,
     io_manager_key="geodataframe_manager",
     group_name="polygons",
 )
 def polygons_unique_name(
-    polygons_renamed_with_nearby: gpd.GeoDataFrame,
-    features: gpd.GeoDataFrame,
+    df_polygons: gpd.GeoDataFrame,
+    df_features: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    name_count = polygons_renamed_with_nearby["name"].apply(
-        lambda x: len(x.split("+")) if not np.isnan(x) else 0,
+    name_count = df_polygons["name"].apply(
+        lambda x: len(x.split("+")) if not pd.isna(x) else 0,
     )
-    single_names = polygons_renamed_with_nearby.loc[name_count == 1, "name"]
-    multiple_names = polygons_renamed_with_nearby.loc[name_count > 1, "name"]
+    single_names = df_polygons.loc[name_count <= 1, ["polygon_id", "name"]]
+    multiple_names = df_polygons.loc[name_count > 1, ["polygon_id", "name", "GID_0"]]
+
+    multiple_names_country_count = multiple_names["GID_0"].apply(
+        lambda x: len(x.split("+")),
+    )
+
+    multiple_names_one_country = multiple_names.loc[  # pyright: ignore[reportCallIssue, reportArgumentType]
+        multiple_names_country_count == 1,
+    ].drop(columns=["GID_0"])
+
+    multiple_names_multiple_countries = multiple_names.loc[  # pyright: ignore[reportCallIssue, reportArgumentType]
+        multiple_names_country_count > 1,
+    ]
+
+    polygon_to_name_one_country = (
+        multiple_names_one_country.assign(
+            feature_id=lambda df: df["name"]
+            .str.split("+")
+            .apply(get_feature_ids_from_name_list),
+        )
+        .drop(columns=["name"])
+        .explode("feature_id")
+        .merge(
+            df_features[["feature_id", "feature_pop", "name"]],
+            on="feature_id",
+            how="left",
+        )
+        .sort_values(["polygon_id", "feature_pop"], ascending=[True, False])
+        .drop_duplicates(subset=["polygon_id"], keep="first")
+        .set_index("polygon_id")["name"]
+        .to_dict()
+    )
+
+    polygon_to_name_multiple_countries = (
+        multiple_names_multiple_countries.assign(
+            country=lambda df: df["GID_0"].str.split("+"),
+        )
+        .drop(columns=["GID_0"])
+        .explode("country")
+        .assign(
+            filtered_name=lambda df: df.apply(
+                lambda row: filter_name_by_country(row["name"], row["country"]),
+                axis=1,
+            ),
+            feature_id=lambda df: df["filtered_name"]
+            .str.split("+")
+            .apply(get_feature_ids_from_name_list),
+        )
+        .drop(columns=["name", "filtered_name"])
+        .explode("feature_id")
+        .dropna(subset=["feature_id"])
+        .merge(
+            df_features[["feature_id", "feature_pop", "name"]],
+            on="feature_id",
+            how="left",
+        )
+        .sort_values(["polygon_id", "feature_pop"], ascending=[True, False])
+        .drop_duplicates(subset=["polygon_id", "country"], keep="first")
+        .assign(name=lambda df: df["name"] + " (" + df["country"] + ")")
+        .groupby("polygon_id")["name"]
+        .apply(lambda x: "+".join(x))
+        .to_dict()
+    )
+
+    polygon_to_name_single = (
+        single_names.set_index("polygon_id")["name"]
+        .str.replace(r"\s*\[.*\]$", "", regex=True)
+        .to_dict()
+    )
+    polygon_to_name_multiple = {
+        **polygon_to_name_one_country,
+        **polygon_to_name_multiple_countries,
+    }
+    polygon_to_name_final = {**polygon_to_name_single, **polygon_to_name_multiple}
+
+    return df_polygons.assign(
+        max_name=lambda df: df["polygon_id"].map(polygon_to_name_final),
+        name=lambda df: df["name"].str.replace(r"\s*\[.*\]$", "", regex=True),
+    )
 
 
 @dg.op

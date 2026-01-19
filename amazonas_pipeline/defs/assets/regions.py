@@ -5,6 +5,7 @@ import geopandas as gpd
 import pandas as pd
 
 import dagster as dg
+from amazonas_pipeline.defs.assets.constants import ISO3_TO_NAME
 from amazonas_pipeline.defs.resources import PathResource
 
 
@@ -31,33 +32,6 @@ def regions_country_level(path_resource: PathResource) -> gpd.GeoDataFrame:
     group_name="regions",
 )
 def regions_lowest_level(path_resource: PathResource) -> gpd.GeoDataFrame:
-    name_map = {
-        "ARG": "Argentina",
-        "BRA": "Brasil",
-        "BLZ": "Belice",
-        "BOL": "Bolivia",
-        "CHL": "Chile",
-        "COL": "Colombia",
-        "CRI": "Costa Rica",
-        "CUB": "Cuba",
-        "DOM": "República Dominicana",
-        "ECU": "Ecuador",
-        "GTM": "Guatemala",
-        "GUF": "Guayana Francesa",
-        "GUY": "Guyana",
-        "HND": "Honduras",
-        "HTI": "Haití",
-        "MEX": "México",
-        "NIC": "Nicaragua",
-        "PAN": "Panamá",
-        "PRY": "Paraguay",
-        "PER": "Perú",
-        "SLV": "El Salvador",
-        "SUR": "Surinam",
-        "URY": "Uruguay",
-        "VEN": "Venezuela",
-    }
-
     gadm_path = Path(path_resource.data_path) / "initial" / "GADM"
 
     out = []
@@ -66,7 +40,7 @@ def regions_lowest_level(path_resource: PathResource) -> gpd.GeoDataFrame:
         df = (
             gpd.read_file(fpath, layer=layers[-1])
             .filter(regex=r"^GID|^NAME|geometry")
-            .assign(NAME_0=lambda df: df["GID_0"].map(name_map))
+            .assign(NAME_0=lambda df: df["GID_0"].map(ISO3_TO_NAME))
         )
         out.append(df)
 
