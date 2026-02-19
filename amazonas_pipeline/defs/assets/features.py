@@ -32,7 +32,7 @@ def process_geofabrik_files(path_resource: PathResource) -> gpd.GeoDataFrame:
         out.append(
             gpd.GeoDataFrame.from_features(data)  # pyright: ignore[reportArgumentType]
             .set_crs("EPSG:4326", allow_override=True)
-            .filter(["place", "name", "geometry"], axis=1)
+            .filter(["place", "name", "population", "geometry"], axis=1)
             .dropna(subset=["name"]),
         )
 
@@ -75,20 +75,37 @@ def add_feature_pop(
 ) -> gpd.GeoDataFrame:
     ghsl_path = Path(path_resource.ghsl_path)
 
-    features_buffered = (
-        features.filter(["feature_id", "geometry"], axis=1)
+    features_with_pop = features[~features["population"].isna()].copy()
+    features_without_pop = features[features["population"].isna()].copy()
+
+    features_without_pop_buffered = (
+        features_without_pop[["geometry"]]
         .to_crs("ESRI:54009")
-        .assign(geometry=lambda df: df["geometry"].buffer(10_000))
+        .assign(geometry=lambda df: df["geometry"].buffer(5_000))
     )
 
     pops = []
     with rio.open(ghsl_path / "POP_1000" / "2020.tif") as ds:
-        for idx, geom in features_buffered["geometry"].items():
+        for idx, geom in features_without_pop_buffered["geometry"].items():
             masked, _ = rio_mask.mask(ds, [geom], crop=True, nodata=0)
-            pops.append({"idx": idx, "feature_pop": masked.sum()})
+            pops.append({"idx": idx, "population": masked.sum()})
 
-    return features.assign(
-        feature_pop=pd.DataFrame(pops).set_index("idx")["feature_pop"],
+    features_new_pop = features_without_pop.assign(
+        population=pd.DataFrame(pops).set_index("idx")["population"],
+    )
+
+    return (
+        pd.concat([features_with_pop, features_new_pop], ignore_index=True)
+        .rename(columns={"population": "feature_pop"})
+        .assign(
+            feature_pop=lambda df: pd.to_numeric(df["feature_pop"], errors="coerce"),
+        )
+        .sort_index()
+        .pipe(
+            gpd.GeoDataFrame,
+            geometry="geometry",
+            crs=features.crs,
+        )
     )
 
 

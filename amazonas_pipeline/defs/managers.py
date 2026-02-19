@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Any
 
-import dagster as dg
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -9,6 +8,7 @@ import rasterio as rio
 from affine import Affine
 from rasterio.crs import CRS
 
+import dagster as dg
 from amazonas_pipeline.defs.resources import PathResource
 
 

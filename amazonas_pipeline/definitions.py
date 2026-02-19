@@ -12,6 +12,7 @@ from amazonas_pipeline.defs.resources import PathResource
 path_resource = PathResource(
     data_path=dg.EnvVar("DATA_PATH"),
     ghsl_path=dg.EnvVar("GHSL_PATH"),
+    entregable_path=dg.EnvVar("ENTREGABLE_PATH"),
 )
 dataframe_manager = DataFrameIOManager(
     path_resource=path_resource,

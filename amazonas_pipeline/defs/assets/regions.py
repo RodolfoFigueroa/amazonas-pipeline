@@ -75,7 +75,7 @@ def boundary(
         gpd.GeoDataFrame(geometry=[union], crs="ESRI:54009")
         .explode()
         .assign(area=lambda df: df["geometry"].area)
-        .query("area > 1e9")
+        .query("area > 1e8")
         .union_all()
     )
     return gpd.GeoDataFrame(geometry=[union_large], crs="ESRI:54009")

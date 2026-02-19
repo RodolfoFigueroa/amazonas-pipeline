@@ -1,15 +1,16 @@
 from ast import literal_eval
-from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import rasterio as rio
-import rasterio.mask as rio_mask
 
 import dagster as dg
+from amazonas_pipeline.defs.assets.shared_funcs import (
+    add_area_and_densities,
+    add_smod_pop,
+    add_total_pop,
+)
 from amazonas_pipeline.defs.partitions import year_and_threshold_partitions
-from amazonas_pipeline.defs.resources import PathResource
 
 
 def reduce_to_set_and_join(group: pd.Series) -> str | float:
@@ -54,8 +55,8 @@ def polygons_filtered_to_boundaries(
             is_required=False,
             io_manager_key="geodataframe_manager",
         ),
-        "polygons_two_countries": dg.AssetOut(
-            key=["polygons", "two_countries"],
+        "polygons_multiple_countries": dg.AssetOut(
+            key=["polygons", "multiple_countries"],
             is_required=False,
             io_manager_key="geodataframe_manager",
         ),
@@ -63,7 +64,7 @@ def polygons_filtered_to_boundaries(
     partitions_def=year_and_threshold_partitions,
     group_name="polygons",
 )
-def polygons_one_and_two_countries(
+def polygons_one_and_multiple_countries(
     context: dg.AssetExecutionContext,
     polygons_filtered: gpd.GeoDataFrame,
     regions: gpd.GeoDataFrame,
@@ -89,7 +90,7 @@ def polygons_one_and_two_countries(
     )
 
     idx_in_one_country = polygon_country_count[polygon_country_count == 1].index  # noqa: F841
-    idx_in_two_countries = polygon_country_count[polygon_country_count == 2].index  # noqa: F841
+    idx_in_multiple_countries = polygon_country_count[polygon_country_count > 1].index  # noqa: F841
 
     polygons_filtered = polygons_filtered.assign(
         regions=lambda df: df["polygon_id"].map(polygon_to_regions_map.to_dict()),
@@ -101,10 +102,10 @@ def polygons_one_and_two_countries(
             output_name="polygons_one_country",
         )
 
-    if "polygons_two_countries" in context.selected_output_names:
+    if "polygons_multiple_countries" in context.selected_output_names:
         yield dg.Output(  # pyright: ignore[reportReturnType]
-            polygons_filtered.query("polygon_id in @idx_in_two_countries"),
-            output_name="polygons_two_countries",
+            polygons_filtered.query("polygon_id in @idx_in_multiple_countries"),
+            output_name="polygons_multiple_countries",
         )
 
 
@@ -112,7 +113,9 @@ def polygons_one_and_two_countries(
     key=["polygons", "joined_with_gadm"],
     ins={
         "polygons_one_country": dg.AssetIn(key=["polygons", "one_country"]),
-        "polygons_two_countries": dg.AssetIn(key=["polygons", "two_countries"]),
+        "polygons_multiple_countries": dg.AssetIn(
+            key=["polygons", "multiple_countries"],
+        ),
         "regions": dg.AssetIn(["regions", "lowest_level"]),
     },
     partitions_def=year_and_threshold_partitions,
@@ -121,7 +124,7 @@ def polygons_one_and_two_countries(
 )
 def polygons_joined_with_gadm(
     polygons_one_country: gpd.GeoDataFrame,
-    polygons_two_countries: gpd.GeoDataFrame,
+    polygons_multiple_countries: gpd.GeoDataFrame,
     regions: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     agg_map = {
@@ -149,8 +152,8 @@ def polygons_joined_with_gadm(
             right_on="region_id",
         )
     )
-    polygons_two_countries_exploded = (
-        polygons_two_countries.assign(
+    polygons_multiple_countries_exploded = (
+        polygons_multiple_countries.assign(
             regions=lambda df: df["regions"].apply(literal_eval),
         )
         .explode("regions")
@@ -166,9 +169,9 @@ def polygons_joined_with_gadm(
             agg_map,
         ),
     )
-    processed_two = pd.DataFrame(
+    processed_multiple = pd.DataFrame(
         (
-            polygons_two_countries_exploded.assign(
+            polygons_multiple_countries_exploded.assign(
                 NAME_1=lambda df: df.apply(
                     lambda row: append_country_name(row["NAME_1"], row["GID_0"]),
                     axis=1,
@@ -193,7 +196,7 @@ def polygons_joined_with_gadm(
 
     return gpd.GeoDataFrame(
         pd.concat(
-            [processed_one, processed_two],
+            [processed_one, processed_multiple],
         )
         .sort_index()
         .reset_index(),
@@ -244,12 +247,12 @@ def merge_single_countries_with_features(
     return polygons_single.merge(polygon_to_features_map, on="polygon_id", how="left")
 
 
-def merge_double_countries_with_features(
-    polygons_double: gpd.GeoDataFrame,
+def merge_multiple_countries_with_features(
+    polygons_multiple: gpd.GeoDataFrame,
     features: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     joined = (
-        polygons_double.assign(country_list=lambda df: df["GID_0"].str.split("+"))
+        polygons_multiple.assign(country_list=lambda df: df["GID_0"].str.split("+"))
         .explode("country_list")
         .assign(
             duplicate_id=lambda df: df.groupby("polygon_id").cumcount(),
@@ -303,7 +306,7 @@ def merge_double_countries_with_features(
         .agg({"feature_name": "+".join})
     )
 
-    return polygons_double.merge(polygon_to_features_map, on="polygon_id", how="left")
+    return polygons_multiple.merge(polygon_to_features_map, on="polygon_id", how="left")
 
 
 @dg.asset(
@@ -336,8 +339,8 @@ def polygons_joined_with_features(
     ).drop(
         columns=["country_list"],
     )
-    polygons_double = polygons_joined_with_gadm.query(
-        "country_list.str.len() == 2",
+    polygons_multiple = polygons_joined_with_gadm.query(
+        "country_list.str.len() > 1",
     ).drop(
         columns=["country_list"],
     )
@@ -346,13 +349,13 @@ def polygons_joined_with_features(
         polygons_single,
         features,
     )
-    processed_double = merge_double_countries_with_features(
-        polygons_double,
+    processed_multiple = merge_multiple_countries_with_features(
+        polygons_multiple,
         features,
     )
     return (
         gpd.GeoDataFrame(
-            pd.concat([processed_single, processed_double], ignore_index=True),
+            pd.concat([processed_single, processed_multiple], ignore_index=True),
         )
         .sort_values("polygon_id")
         .rename(columns={"feature_name": "name"})
@@ -423,11 +426,9 @@ def polygons_renamed_with_nearby(
 
     for level in ["city", "town", "village", "hamlet"]:
         df_level = features.query(f"place == '{level}'").filter(["name", "geometry"])
-        joined = (
-            missing_polygons.sjoin_nearest(df_level, how="inner", distance_col="dist")
-            .query("dist < 10000")
-            .drop(columns=["dist", "index_right"])
-        )
+        joined = missing_polygons.sjoin_nearest(
+            df_level, how="inner", distance_col="dist",
+        ).drop(columns=["dist", "index_right"])
         named.append(joined)
         found_indices.extend(joined.index.unique().to_list())
         missing_polygons = missing_polygons.drop(index=found_indices, errors="ignore")
@@ -547,118 +548,24 @@ def polygons_unique_name(
 
     polygon_to_name_single = (
         single_names.set_index("polygon_id")["name"]
-        .str.replace(r"\s*\[.*\]$", "", regex=True)
+        .str.replace(r"\s*\[f[0-9]{7}\]", "", regex=True)
+        .str.replace(" [geocoding]", "")
+        .str.strip()
         .to_dict()
     )
-    polygon_to_name_multiple = {
+    polygon_to_name_final = {
+        **polygon_to_name_single,
         **polygon_to_name_one_country,
         **polygon_to_name_multiple_countries,
     }
-    polygon_to_name_final = {**polygon_to_name_single, **polygon_to_name_multiple}
 
     return df_polygons.assign(
         max_name=lambda df: df["polygon_id"].map(polygon_to_name_final),
-        name=lambda df: df["name"].str.replace(r"\s*\[.*\]$", "", regex=True),
+        name=lambda df: df["name"]
+        .str.replace(r"\s*\[f[0-9]{7}\]", "", regex=True)
+        .str.replace(" [geocoding]", "")
+        .str.strip(),
     )
-
-
-@dg.op
-def add_total_pop(
-    path_resource: PathResource,
-    polygons: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
-    ghsl_path = Path(path_resource.ghsl_path)
-
-    out = []
-    for year in range(1975, 2021, 5):
-        raster_path = ghsl_path / "POP_1000" / f"{year}.tif"
-        with rio.open(raster_path) as ds:
-            for idx, geom in polygons["geometry"].items():
-                masked, _ = rio_mask.mask(ds, [geom], crop=True, nodata=0)
-                out.append(
-                    {
-                        "idx": idx,
-                        "year": year,
-                        "pop": masked.sum(),
-                    },
-                )
-
-    pops = (
-        pd.DataFrame(out)
-        .pivot_table(index="idx", columns="year", values="pop")
-        .add_prefix("pop_", axis=1)
-    )
-    return pd.concat([polygons, pops], axis=1).pipe(
-        gpd.GeoDataFrame,
-        geometry="geometry",
-        crs=polygons.crs,
-    )
-
-
-@dg.op(out=dg.Out(io_manager_key="geodataframe_manager"))
-def add_smod_pop(
-    path_resource: PathResource,
-    polygons: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
-    ghsl_path = Path(path_resource.ghsl_path)
-
-    res = []
-    for year in range(1975, 2021, 5):
-        with (
-            rio.open(ghsl_path / "POP_1000" / f"{year}.tif") as ds_pop,
-            rio.open(ghsl_path / "SMOD_1000" / f"{year}.tif") as ds_smod,
-        ):
-            for idx, geom in polygons["geometry"].items():
-                masked_pop, _ = rio_mask.mask(ds_pop, [geom], crop=True, nodata=0)
-                masked_smod, _ = rio_mask.mask(ds_smod, [geom], crop=True, nodata=0)
-
-                masked_pop = masked_pop.squeeze()
-                masked_smod = (masked_smod // 10 * 10).squeeze()
-
-                weighted_count = np.bincount(
-                    masked_smod.reshape(-1),
-                    weights=masked_pop.reshape(-1),
-                )
-
-                res.append(
-                    {
-                        "idx": idx,
-                        "year": year,
-                        "pop_urban_center": weighted_count[30]
-                        if len(weighted_count) > 30
-                        else 0,
-                        "pop_urban_cluster": weighted_count[20]
-                        if len(weighted_count) > 20
-                        else 0,
-                        "pop_rural": weighted_count[10]
-                        if len(weighted_count) > 10
-                        else 0,
-                    },
-                )
-
-    concat = pd.DataFrame(res)
-    df_urban_center = concat.pivot_table(
-        index="idx",
-        columns="year",
-        values="pop_urban_center",
-    ).add_prefix("pop_urban_center_")
-    df_urban_cluster = concat.pivot_table(
-        index="idx",
-        columns="year",
-        values="pop_urban_cluster",
-    ).add_prefix("pop_urban_cluster_")
-    df_rural = concat.pivot_table(
-        index="idx",
-        columns="year",
-        values="pop_rural",
-    ).add_prefix(
-        "pop_rural_",
-    )
-
-    return pd.concat(
-        [polygons, df_urban_center, df_urban_cluster, df_rural],
-        axis=1,
-    ).pipe(gpd.GeoDataFrame, geometry="geometry", crs=polygons.crs)
 
 
 @dg.graph_asset(
@@ -674,5 +581,6 @@ def add_smod_pop(
 def polygons_population(
     polygons_renamed_with_nearby: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    polygons = add_total_pop(polygons_renamed_with_nearby)
-    return add_smod_pop(polygons)
+    polygons_with_pop = add_total_pop(polygons_renamed_with_nearby)
+    polygons_with_smod = add_smod_pop(polygons_with_pop)
+    return add_area_and_densities(polygons_with_smod)

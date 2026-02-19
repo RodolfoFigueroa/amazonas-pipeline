@@ -218,3 +218,4 @@ __marimo__/
 # Extra
 dagster/*
 !dagster.yml
+.DS_Store
