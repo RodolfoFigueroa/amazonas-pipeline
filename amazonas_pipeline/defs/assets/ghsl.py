@@ -1,3 +1,5 @@
+import os
+import sys
 import tempfile
 import warnings
 from pathlib import Path
@@ -11,7 +13,7 @@ import rasterio.transform as rio_transform
 import scipy
 import shapely
 from affine import Affine
-from rasterio.crs import CRS
+from rasterio.crs import CRS  # ty:ignore[unresolved-import]
 from rpy2.robjects import r
 from rpy2.robjects.packages import importr
 from rpy2.robjects.vectors import FloatVector, ListVector, StrVector
@@ -22,6 +24,14 @@ from amazonas_pipeline.defs.partitions import (
     year_partitions,
 )
 from amazonas_pipeline.defs.resources import PathResource
+
+if sys.platform == "win32" and sys.version_info >= (3, 8):
+    dll_dir = Path(os.environ["R_HOME"]) / "bin" / "x64"
+    if not dll_dir.exists() or not dll_dir.is_dir():
+        err = f"Expected R DLL directory not found: {dll_dir}"
+        raise FileNotFoundError(err)
+
+    os.add_dll_directory(str(dll_dir))
 
 
 def get_buffered_bounds(df: gpd.GeoDataFrame) -> list[float]:
@@ -62,6 +72,8 @@ def ghsl_rasters(
     if not all_exist:
         flexurba.download_GHSLdata(
             output_directory=str(global_dir),
+            filenames=StrVector(["BUILT_S.tif", "POP.tif", "LAND.tif"]),
+            products=StrVector(["BUILT_S", "POP", "LAND"]),
             epoch=int(context.partition_key),
             resolution=1000,
             crs=54009,
@@ -106,7 +118,9 @@ def ghsl_rasters_cropped(
     flexurba.crop_GHSLdata(
         extent=terra.ext(bbox),
         global_directory=str(global_dir),
+        global_filenames=StrVector(["BUILT_S.tif", "POP.tif", "LAND.tif"]),
         output_directory=str(out_dir),
+        output_filenames=StrVector(["BUILT_S.tif", "POP.tif", "LAND.tif"]),
     )
 
 
@@ -170,7 +184,7 @@ def crop_pop(
     path_resource: PathResource,
     data_and_transform: tuple[np.ndarray, Affine],
 ) -> np.ndarray:
-    year = context.partition_key.keys_by_dimension["year"]  # pyright: ignore[reportAttributeAccessIssue]
+    year = context.multi_partition_key.keys_by_dimension["year"]
 
     data, transform = data_and_transform
     height, width = data.shape

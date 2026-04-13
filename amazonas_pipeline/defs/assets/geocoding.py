@@ -118,7 +118,16 @@ def geocode_chunk(key_chunk: list[int], chunk: list[dict]) -> list[dict]:
 def download_geocoding_points(
     context: dg.AssetExecutionContext,
     polygons: gpd.GeoDataFrame,
-) -> pd.DataFrame:
+) -> gpd.GeoDataFrame:
+    year = int(context.multi_partition_key.keys_by_dimension["year"])
+    if year != 2020:
+        return gpd.GeoDataFrame(
+            [],
+            columns=["name", "key"],
+            geometry=[],
+            crs="EPSG:4326",
+        )
+
     polygons = polygons.query("name.isna()")
 
     centroids = get_centroids(polygons)

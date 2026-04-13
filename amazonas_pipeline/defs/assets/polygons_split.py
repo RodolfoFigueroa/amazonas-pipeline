@@ -44,9 +44,9 @@ def polygons_split(
         .explode("countries")
         .assign(duplicate_id=lambda df: df.groupby("polygon_id").cumcount())
         .assign(
-            duplicate_polygon_id=lambda df: df["polygon_id"].astype(str)
-            + "_"
-            + df["duplicate_id"].astype(str),
+            duplicate_polygon_id=lambda df: (
+                df["polygon_id"].astype(str) + "_" + df["duplicate_id"].astype(str)
+            ),
         )
         .drop(
             columns=["GID_0", "NAME_0", "geometry"]

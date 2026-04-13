@@ -256,9 +256,9 @@ def merge_multiple_countries_with_features(
         .explode("country_list")
         .assign(
             duplicate_id=lambda df: df.groupby("polygon_id").cumcount(),
-            modified_polygon_id=lambda df: df["polygon_id"]
-            + "_"
-            + df["duplicate_id"].astype(str),
+            modified_polygon_id=lambda df: (
+                df["polygon_id"] + "_" + df["duplicate_id"].astype(str)
+            ),
         )
         .drop(columns=["duplicate_id"])
         .sjoin(
@@ -277,12 +277,9 @@ def merge_multiple_countries_with_features(
     feature_id_to_name = (
         features.set_index("feature_id")
         .assign(
-            name=lambda df: df["name"]
-            + " ("
-            + df["GID_0"]
-            + ") ["
-            + df.index.astype(str)
-            + "]",
+            name=lambda df: (
+                df["name"] + " (" + df["GID_0"] + ") [" + df.index.astype(str) + "]"
+            ),
         )["name"]
         .to_dict()
     )
@@ -427,7 +424,9 @@ def polygons_renamed_with_nearby(
     for level in ["city", "town", "village", "hamlet"]:
         df_level = features.query(f"place == '{level}'").filter(["name", "geometry"])
         joined = missing_polygons.sjoin_nearest(
-            df_level, how="inner", distance_col="dist",
+            df_level,
+            how="inner",
+            distance_col="dist",
         ).drop(columns=["dist", "index_right"])
         named.append(joined)
         found_indices.extend(joined.index.unique().to_list())
@@ -498,9 +497,9 @@ def polygons_unique_name(
 
     polygon_to_name_one_country = (
         multiple_names_one_country.assign(
-            feature_id=lambda df: df["name"]
-            .str.split("+")
-            .apply(get_feature_ids_from_name_list),
+            feature_id=lambda df: (
+                df["name"].str.split("+").apply(get_feature_ids_from_name_list)
+            ),
         )
         .drop(columns=["name"])
         .explode("feature_id")
@@ -526,9 +525,9 @@ def polygons_unique_name(
                 lambda row: filter_name_by_country(row["name"], row["country"]),
                 axis=1,
             ),
-            feature_id=lambda df: df["filtered_name"]
-            .str.split("+")
-            .apply(get_feature_ids_from_name_list),
+            feature_id=lambda df: (
+                df["filtered_name"].str.split("+").apply(get_feature_ids_from_name_list)
+            ),
         )
         .drop(columns=["name", "filtered_name"])
         .explode("feature_id")
@@ -561,10 +560,12 @@ def polygons_unique_name(
 
     return df_polygons.assign(
         max_name=lambda df: df["polygon_id"].map(polygon_to_name_final),
-        name=lambda df: df["name"]
-        .str.replace(r"\s*\[f[0-9]{7}\]", "", regex=True)
-        .str.replace(" [geocoding]", "")
-        .str.strip(),
+        name=lambda df: (
+            df["name"]
+            .str.replace(r"\s*\[f[0-9]{7}\]", "", regex=True)
+            .str.replace(" [geocoding]", "")
+            .str.strip()
+        ),
     )
 
 
