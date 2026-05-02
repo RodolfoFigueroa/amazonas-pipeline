@@ -219,3 +219,4 @@ __marimo__/
 dagster/*
 !dagster.yml
 .DS_Store
+generated/

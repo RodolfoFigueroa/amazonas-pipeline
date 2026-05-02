@@ -4,6 +4,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio as rio
+from amazonas_pipeline.utils import generate_boxes
 import shapely
 from shapely.prepared import prep
 
@@ -23,27 +24,11 @@ def cells(
 ) -> gpd.GeoDataFrame:
     xmin, ymin, xmax, ymax = boundary.total_bounds
 
-    xmin = int(np.floor(xmin / 1000) * 1000)
-    ymin = int(np.floor(ymin / 1000) * 1000)
-    xmax = int(np.ceil(xmax / 1000) * 1000)
-    ymax = int(np.ceil(ymax / 1000) * 1000)
-
-    xrange = list(range(xmin, xmax + 1000, 1000))
-    yrange = list(range(ymin, ymax + 1000, 1000))
-
-    df_boxes = [
-        {
-            "id": int(i * len(yrange) + j),
-            "geometry": shapely.box(x_start, y_start, x_start + 1000, y_start + 1000),
-        }
-        for i, x_start in enumerate(xrange)
-        for j, y_start in enumerate(yrange)
-    ]
-    df_boxes = gpd.GeoDataFrame(
-        pd.DataFrame(df_boxes).set_index("id"),
-        crs=boundary.crs,
-        geometry="geometry",
-    )
+    crs = boundary.crs
+    if crs is None:
+        err = "Boundary GeoDataFrame must have a CRS defined."
+        raise ValueError(err)
+    df_boxes = generate_boxes(xmin, ymin, xmax, ymax, crs=crs)
 
     prepared = prep(boundary["geometry"].item())
     return gpd.GeoDataFrame(
