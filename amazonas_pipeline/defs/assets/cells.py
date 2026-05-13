@@ -4,13 +4,12 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio as rio
-from amazonas_pipeline.utils import generate_boxes
-import shapely
 from shapely.prepared import prep
 
 import dagster as dg
 from amazonas_pipeline.defs.partitions import year_and_threshold_partitions
 from amazonas_pipeline.defs.resources import PathResource
+from amazonas_pipeline.utils import generate_boxes
 
 
 @dg.asset(

@@ -1,12 +1,12 @@
-import shapely
-from pyproj import CRS
-import pandas as pd
 import os
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import rasterio as rio
+import shapely
+from pyproj import CRS
 
 
 def join_cells_with_polygons(
@@ -58,7 +58,14 @@ def add_pop_and_smod_to_cells(
     return cells
 
 
-def generate_boxes(xmin: float, ymin: float, xmax: float, ymax: float, *, crs: CRS | str) -> gpd.GeoDataFrame:
+def generate_boxes(
+    xmin: float,
+    ymin: float,
+    xmax: float,
+    ymax: float,
+    *,
+    crs: CRS | str,
+) -> gpd.GeoDataFrame:
     xmin = int(np.floor(xmin / 1000) * 1000)
     ymin = int(np.floor(ymin / 1000) * 1000)
     xmax = int(np.ceil(xmax / 1000) * 1000)

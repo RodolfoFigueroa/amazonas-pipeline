@@ -31,7 +31,7 @@ dev = [
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["D", "PLR2004", "ANN401"]
+ignore = ["D", "PLR2004", "ANN401", "COM812"]
 
 [tool.basedpyright]
 typeCheckingMode = "standard"
